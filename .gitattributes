@@ -1,0 +1,4 @@
+# Quebras de linha no padrão Unix no repositório: os arquivos rodam em containers Linux
+* text=auto eol=lf
+*.png binary
+*.ico binary
