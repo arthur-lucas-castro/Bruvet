@@ -3,6 +3,7 @@
   "framework": null,
   "installCommand": "npm ci --include=dev",
   "buildCommand": "npm run vercel-build",
+  "ignoreCommand": "node scripts/vercel-ignore-build.mjs",
   "outputDirectory": "public",
   "regions": ["gru1"],
   "functions": {
