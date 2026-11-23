@@ -1,0 +1,16 @@
+# Variáveis de ambiente (podem conter senhas e segredos)
+.env
+.env.*
+!.env.example
+
+# Dependências e builds
+node_modules/
+dist/
+
+# Sistema e editores
+.DS_Store
+Thumbs.db
+*.log
+.vscode/*
+!.vscode/extensions.json
+.idea/

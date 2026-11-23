@@ -1,0 +1,39 @@
+# Ambiente de produção: frontend servido pelo nginx e API compilada.
+# Uso: docker compose up -d --build   →  http://localhost:8080
+name: bruvet
+
+services:
+  backend:
+    build:
+      context: ./backend
+      target: prod
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3333
+      DATABASE_URL: file:/app/data/bruvet.db
+      DATA_DIR: /app/data
+      # Defina COOKIE_SECURE=true quando o sistema for servido por HTTPS
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      # Admin criado no primeiro start. Sem ADMIN_PASSWORD, uma senha provisória
+      # aleatória aparece em: docker compose logs backend
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@bruvet.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      # Vazio = segredo gerado e guardado no volume de dados
+      JWT_SECRET: ${JWT_SECRET:-}
+    volumes:
+      - bruvet-data:/app/data
+
+  frontend:
+    build:
+      context: ./frontend
+      target: prod
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  bruvet-data:
