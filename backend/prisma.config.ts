@@ -7,7 +7,11 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    // Padrão igual ao de src/config/env.ts; permite rodar `prisma generate` sem .env (ex.: build Docker)
-    url: process.env.DATABASE_URL ?? "file:./data/bruvet.db",
+    // Migrations usam a conexão direta (sem pooler) quando existe — o Neon fornece as duas.
+    // O padrão permite rodar `prisma generate` sem .env (ex.: build Docker).
+    url:
+      process.env.DATABASE_URL_UNPOOLED ??
+      process.env.DATABASE_URL ??
+      "postgresql://bruvet:bruvet@localhost:5432/bruvet",
   },
 });

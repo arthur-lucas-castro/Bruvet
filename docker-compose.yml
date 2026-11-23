@@ -3,6 +3,21 @@
 name: bruvet
 
 services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: bruvet
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bruvet}
+      POSTGRES_DB: bruvet
+    volumes:
+      - bruvet-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bruvet -d bruvet"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   backend:
     build:
       context: ./backend
@@ -11,7 +26,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3333
-      DATABASE_URL: file:/app/data/bruvet.db
+      DATABASE_URL: postgresql://bruvet:${POSTGRES_PASSWORD:-bruvet}@db:5432/bruvet
       DATA_DIR: /app/data
       # Defina COOKIE_SECURE=true quando o sistema for servido por HTTPS
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
@@ -23,6 +38,9 @@ services:
       JWT_SECRET: ${JWT_SECRET:-}
     volumes:
       - bruvet-data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
 
   frontend:
     build:
@@ -37,3 +55,4 @@ services:
 
 volumes:
   bruvet-data:
+  bruvet-pg:

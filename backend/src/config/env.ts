@@ -9,9 +9,12 @@ const booleanFromString = z
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   PORT: z.coerce.number().int().positive().default(3333),
-  DATABASE_URL: z.string().min(1).default("file:./data/bruvet.db"),
-  /** Pasta de dados persistentes (banco e segredo gerado automaticamente). */
+  /** Conexão Postgres usada pela API (na Vercel/Neon, a URL com pooler). */
+  DATABASE_URL: z.string().min(1).default("postgresql://bruvet:bruvet@localhost:5432/bruvet"),
+  /** Pasta de dados persistentes (segredo das sessões gerado automaticamente). */
   DATA_DIR: z.string().min(1).default("./data"),
+  /** Definida pela própria Vercel nas funções ("1"). */
+  VERCEL: z.string().optional(),
   // Origens liberadas no CORS, separadas por vírgula. Vazio = libera todas (só em dev).
   CORS_ORIGIN: z.string().default(""),
 

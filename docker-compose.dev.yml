@@ -4,6 +4,23 @@
 name: bruvet-dev
 
 services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: bruvet
+      POSTGRES_PASSWORD: bruvet
+      POSTGRES_DB: bruvet
+    # Exposto para rodar migrations e o Prisma Studio a partir da máquina
+    ports:
+      - "5432:5432"
+    volumes:
+      - bruvet-dev-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bruvet -d bruvet"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   backend:
     build:
       context: ./backend
@@ -11,7 +28,7 @@ services:
     environment:
       NODE_ENV: development
       PORT: 3333
-      DATABASE_URL: file:/app/data/bruvet.db
+      DATABASE_URL: postgresql://bruvet:bruvet@db:5432/bruvet
       DATA_DIR: /app/data
       # Login inicial de desenvolvimento (troca de senha exigida no primeiro acesso)
       ADMIN_EMAIL: admin@bruvet.local
@@ -20,6 +37,9 @@ services:
       - "3333:3333"
     volumes:
       - bruvet-dev-data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
     develop:
       watch:
         - action: sync
@@ -57,3 +77,4 @@ services:
 
 volumes:
   bruvet-dev-data:
+  bruvet-dev-pg:

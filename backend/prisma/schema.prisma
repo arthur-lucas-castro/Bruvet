@@ -10,7 +10,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 // ---------- Etapa 1: usuários ----------
@@ -171,7 +171,7 @@ model ProcedurePrice {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  // Obs.: no SQLite, NULLs não colidem no índice único; o service também impede repetição
+  // Obs.: no Postgres, NULLs não colidem no índice único; o service também impede repetição
   @@unique([procedureId, species, size])
   @@map("procedure_prices")
 }
