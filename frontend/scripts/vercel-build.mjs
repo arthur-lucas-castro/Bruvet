@@ -39,9 +39,9 @@ const host = apiHost();
 // "Protection Bypass for Automation" da API, o proxy o envia (só servidor → servidor;
 // o navegador nunca vê esta URL).
 const bypass = environment !== "production" ? process.env.API_PROTECTION_BYPASS : undefined;
-const query = bypass
-  ? `?x-vercel-protection-bypass=${encodeURIComponent(bypass)}&x-vercel-set-bypass-cookie=false`
-  : "";
+// Só o parâmetro do segredo: com "x-vercel-set-bypass-cookie" a Vercel responde com um
+// redirecionamento (307) em vez de entregar a resposta da API.
+const query = bypass ? `?x-vercel-protection-bypass=${encodeURIComponent(bypass)}` : "";
 
 console.log(`Ambiente: ${environment} → /api aponta para https://${host}${bypass ? " (com bypass)" : ""}`);
 
