@@ -1,0 +1,406 @@
+// Schema do banco do Bruvet.
+// Toda alteração aqui deve vir acompanhada de uma migration: npm run db:migrate -- --name <descricao>
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  runtime             = "nodejs"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ---------- Etapa 1: usuários ----------
+
+model User {
+  id                 String   @id @default(cuid())
+  name               String
+  email              String   @unique
+  passwordHash       String
+  /// "admin" | "veterinario" | "recepcao" — validado em src/modules/users/roles.ts
+  role               String
+  /// Registro no Conselho Regional de Medicina Veterinária (obrigatório para veterinários)
+  crmv               String?
+  active             Boolean  @default(true)
+  /// Senha provisória (criada pelo admin ou no primeiro acesso): obriga a troca no login
+  mustChangePassword Boolean  @default(true)
+  /// Incrementado ao trocar senha ou desativar: invalida as sessões abertas
+  tokenVersion       Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  procedurePriceChanges ProcedurePriceChange[]
+  stockMovements        StockMovement[]
+  attendancesAsVet      Attendance[]           @relation("AttendanceVeterinarian")
+  attendancesCreated    Attendance[]           @relation("AttendanceCreatedBy")
+  attendanceNotes       AttendanceNote[]
+  attendanceProcedures  AttendanceProcedure[]
+  patientWeights        PatientWeight[]
+
+  @@map("users")
+}
+
+// ---------- Etapa 2: tutores e pacientes ----------
+
+model Tutor {
+  id         String    @id @default(cuid())
+  name       String
+  /// Somente dígitos
+  cpf        String?   @unique
+  /// Somente dígitos
+  phone      String
+  phoneAlt   String?
+  email      String?
+  zipCode    String?
+  street     String?
+  number     String?
+  complement String?
+  district   String?
+  city       String?
+  /// UF (2 letras)
+  state      String?
+  notes      String?
+  /// Nome, CPF e telefones normalizados (minúsculas, sem acento) para a busca
+  searchText String
+  patients   Patient[]
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([searchText])
+  @@map("tutors")
+}
+
+model Patient {
+  id                 String          @id @default(cuid())
+  /// Número do prontuário, sequencial e exibido para a equipe
+  code               Int             @unique
+  name               String
+  /// "cao" | "gato" | "ave" | "roedor" | "coelho" | "reptil" | "outro" — ver src/modules/patients/species.ts
+  species            String
+  breed              String?
+  /// "macho" | "femea" | "indefinido"
+  sex                String
+  neutered           Boolean         @default(false)
+  /// Data de nascimento (somente a data, guardada à meia-noite UTC)
+  birthDate          DateTime?
+  /// true quando a data de nascimento é aproximada
+  birthDateEstimated Boolean         @default(false)
+  color              String?
+  microchip          String?         @unique
+  /// Peso atual em kg
+  weightKg           Float?
+  /// "pequeno" | "medio" | "grande" — usado para aplicar o preço por porte dos procedimentos
+  size               String?
+  allergies          String?
+  chronicConditions  String?
+  notes              String?
+  /// Data do óbito; preenchida = paciente falecido
+  deceasedAt         DateTime?
+  /// Nome, raça e microchip normalizados para a busca
+  searchText         String
+  tutorId            String
+  tutor              Tutor           @relation(fields: [tutorId], references: [id], onDelete: Restrict)
+  stockMovements     StockMovement[]
+  attendances        Attendance[]
+  weights            PatientWeight[]
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  @@index([tutorId])
+  @@index([searchText])
+  @@map("patients")
+}
+
+// ---------- Etapa 3: catálogo de procedimentos ----------
+
+model ProcedureCategory {
+  id         String      @id @default(cuid())
+  name       String      @unique
+  /// Ordem de exibição (menor primeiro)
+  sortOrder  Int         @default(0)
+  procedures Procedure[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@map("procedure_categories")
+}
+
+model Procedure {
+  id              String                 @id @default(cuid())
+  /// Código interno opcional (ex.: "CON-01"), único quando informado
+  code            String?                @unique
+  name            String
+  description     String?
+  /// Orientações ao tutor (ex.: jejum de 12 horas)
+  preparation     String?
+  /// Valor padrão em centavos (R$ 150,00 = 15000), usado quando nenhuma variação se aplica
+  priceCents      Int
+  durationMinutes Int?
+  /// Inativo = não aparece para novos atendimentos, mas continua no histórico
+  active          Boolean                @default(true)
+  /// Nome, código e descrição normalizados para a busca
+  searchText      String
+  categoryId      String
+  category        ProcedureCategory      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  prices          ProcedurePrice[]
+  priceChanges    ProcedurePriceChange[]
+  attendanceItems AttendanceProcedure[]
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  @@index([categoryId])
+  @@index([searchText])
+  @@map("procedures")
+}
+
+/// Variação de preço por espécie e/ou porte. Vale a mais específica que combinar com o
+/// paciente (espécie + porte > só espécie > só porte > valor padrão do procedimento).
+/// Ver src/modules/procedures/pricing.ts
+model ProcedurePrice {
+  id          String    @id @default(cuid())
+  procedureId String
+  procedure   Procedure @relation(fields: [procedureId], references: [id], onDelete: Cascade)
+  /// null = qualquer espécie
+  species     String?
+  /// null = qualquer porte
+  size        String?
+  priceCents  Int
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Obs.: no SQLite, NULLs não colidem no índice único; o service também impede repetição
+  @@unique([procedureId, species, size])
+  @@map("procedure_prices")
+}
+
+/// Registro de cada alteração de preço (auditoria)
+model ProcedurePriceChange {
+  id            String    @id @default(cuid())
+  procedureId   String
+  procedure     Procedure @relation(fields: [procedureId], references: [id], onDelete: Cascade)
+  /// Variação alterada; ambos null = valor padrão
+  species       String?
+  size          String?
+  /// null = variação criada agora (ou cadastro do procedimento)
+  oldPriceCents Int?
+  /// null = variação removida
+  newPriceCents Int?
+  changedById   String
+  changedBy     User      @relation(fields: [changedById], references: [id], onDelete: Restrict)
+  changedAt     DateTime  @default(now())
+
+  @@index([procedureId, changedAt])
+  @@map("procedure_price_changes")
+}
+
+// ---------- Etapa 4: estoque de medicamentos ----------
+
+model Medication {
+  id               String          @id @default(cuid())
+  /// Nome comercial (ex.: "Meloxicam 2 mg")
+  name             String
+  activeIngredient String?
+  /// Forma farmacêutica (ex.: comprimido, injetável, suspensão oral)
+  presentation     String?
+  /// Ex.: "2 mg", "10 mg/mL"
+  concentration    String?
+  manufacturer     String?
+  /// Unidade de controle do estoque — ver src/modules/stock/units.ts
+  unit             String
+  /// Alerta de estoque baixo quando o saldo válido fica igual ou abaixo deste valor
+  minStock         Float           @default(0)
+  /// Medicamento controlado (Portaria 344): saídas exigem justificativa
+  controlled       Boolean         @default(false)
+  notes            String?
+  active           Boolean         @default(true)
+  /// Nome, princípio ativo e fabricante normalizados para a busca
+  searchText       String
+  batches          StockBatch[]
+  movements        StockMovement[]
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([searchText])
+  @@map("medications")
+}
+
+/// Lote de um medicamento. O saldo do medicamento é a soma dos lotes.
+model StockBatch {
+  id            String          @id @default(cuid())
+  medicationId  String
+  medication    Medication      @relation(fields: [medicationId], references: [id], onDelete: Restrict)
+  batchNumber   String
+  /// Validade (somente a data, meia-noite UTC)
+  expiresAt     DateTime
+  /// Saldo atual do lote, na unidade do medicamento
+  quantity      Float
+  /// Custo unitário em centavos na última entrada (opcional)
+  unitCostCents Int?
+  supplier      String?
+  movements     StockMovement[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@unique([medicationId, batchNumber])
+  @@index([expiresAt])
+  @@map("stock_batches")
+}
+
+/// Toda alteração de saldo. Nunca é editada nem apagada (trilha de auditoria).
+model StockMovement {
+  id           String         @id @default(cuid())
+  /// "entrada" | "saida" | "ajuste" | "perda" | "estorno"
+  type         String
+  /// Variação do saldo do lote: positiva em entradas, negativa em saídas e perdas
+  quantity     Float
+  /// Saldo do lote logo após a movimentação
+  balanceAfter Float
+  reason       String?
+  medicationId String
+  medication   Medication     @relation(fields: [medicationId], references: [id], onDelete: Restrict)
+  batchId      String
+  batch        StockBatch     @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  /// Paciente que recebeu o medicamento (saídas)
+  patientId    String?
+  patient      Patient?       @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  /// Atendimento em que o medicamento foi usado (Etapa 5)
+  attendanceId String?
+  attendance   Attendance?    @relation(fields: [attendanceId], references: [id], onDelete: Restrict)
+  /// Estorno: aponta para a saída desfeita (cada saída só pode ser estornada uma vez)
+  reversalOfId String?        @unique
+  reversalOf   StockMovement? @relation("StockReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversedBy   StockMovement? @relation("StockReversal")
+  userId       String
+  user         User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  createdAt    DateTime       @default(now())
+
+  @@index([medicationId, createdAt])
+  @@index([patientId])
+  @@index([attendanceId])
+  @@map("stock_movements")
+}
+
+// ---------- Etapa 5: atendimentos ----------
+
+model Attendance {
+  id             String    @id @default(cuid())
+  /// Número sequencial exibido para a equipe
+  code           Int       @unique
+  /// "consulta" | "retorno" | "emergencia" | "vacinacao" | "cirurgia" | "exame" | "internacao"
+  kind           String
+  /// "aberto" | "finalizado" | "cancelado"
+  status         String    @default("aberto")
+  patientId      String
+  patient        Patient   @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  veterinarianId String
+  veterinarian   User      @relation("AttendanceVeterinarian", fields: [veterinarianId], references: [id], onDelete: Restrict)
+  createdById    String
+  createdBy      User      @relation("AttendanceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  startedAt      DateTime  @default(now())
+  finishedAt     DateTime?
+  cancelReason   String?
+
+  // Anamnese
+  chiefComplaint     String?
+  history            String?
+  diet               String?
+  /// Vacinação e vermifugação
+  vaccination        String?
+  /// Ambiente, contactantes, acesso à rua
+  environment        String?
+  currentMedications String?
+
+  // Exame físico
+  weightKg           Float?
+  temperatureC       Float?
+  /// Frequência cardíaca (bpm)
+  heartRate          Int?
+  /// Frequência respiratória (mpm)
+  respiratoryRate    Int?
+  /// Tempo de preenchimento capilar (segundos)
+  capillaryRefillSec Float?
+  /// "normal" | "leve" | "moderada" | "grave" (grau de desidratação)
+  hydration          String?
+  /// "normocoradas" | "hipocoradas" | "hipercoradas" | "ictericas" | "cianoticas"
+  mucosa             String?
+  /// Escore de condição corporal (1 a 9)
+  bodyCondition      Int?
+  physicalExam       String?
+
+  // Conclusão
+  diagnosis     String?
+  treatmentPlan String?
+
+  notes          AttendanceNote[]
+  procedures     AttendanceProcedure[]
+  stockMovements StockMovement[]
+  weight         PatientWeight?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@index([patientId, startedAt])
+  @@index([status, startedAt])
+  @@index([veterinarianId])
+  @@map("attendances")
+}
+
+/// Anotação de evolução. Não é editada; depois de finalizado vale como adendo.
+model AttendanceNote {
+  id           String     @id @default(cuid())
+  attendanceId String
+  attendance   Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  authorId     String
+  author       User       @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  text         String
+  createdAt    DateTime   @default(now())
+
+  @@index([attendanceId, createdAt])
+  @@map("attendance_notes")
+}
+
+/// Procedimento realizado. Nome e preço são copiados do catálogo no momento do lançamento.
+model AttendanceProcedure {
+  id           String     @id @default(cuid())
+  attendanceId String
+  attendance   Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  procedureId  String
+  procedure    Procedure  @relation(fields: [procedureId], references: [id], onDelete: Restrict)
+  name         String
+  /// Preço unitário aplicado (centavos), já considerando espécie/porte
+  priceCents   Int
+  quantity     Int        @default(1)
+  /// Variação de preço aplicada (null/null = valor padrão)
+  species      String?
+  size         String?
+  notes        String?
+  addedById    String
+  addedBy      User       @relation(fields: [addedById], references: [id], onDelete: Restrict)
+  createdAt    DateTime   @default(now())
+
+  @@index([attendanceId])
+  @@map("attendance_procedures")
+}
+
+// ---------- Etapa 6: histórico do paciente ----------
+
+/// Cada pesagem do paciente, para a curva de peso do histórico
+model PatientWeight {
+  id           String      @id @default(cuid())
+  patientId    String
+  patient      Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  weightKg     Float
+  /// "cadastro" (cadastro/edição do paciente) | "atendimento" (exame físico ao finalizar)
+  source       String
+  /// Uma pesagem por atendimento (finalizar de novo após reabrir substitui a anterior)
+  attendanceId String?     @unique
+  attendance   Attendance? @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  recordedById String?
+  recordedBy   User?       @relation(fields: [recordedById], references: [id], onDelete: SetNull)
+  recordedAt   DateTime    @default(now())
+
+  @@index([patientId, recordedAt])
+  @@map("patient_weights")
+}
