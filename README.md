@@ -5,7 +5,7 @@ Sistema de gestão para hospital veterinário.
 | Pasta | Stack |
 |---|---|
 | [frontend/](frontend/) | React 19, Vite, TypeScript, Tailwind CSS 4, React Router, TanStack Query, ícones Lucide |
-| [backend/](backend/) | Node 24, Express 5, TypeScript, Prisma 7 + SQLite (adaptador libSQL), zod |
+| [backend/](backend/) | Node 24, Express 5, TypeScript, Prisma 7 + PostgreSQL (adaptador `pg`), zod |
 | [design-system/bruvet/MASTER.md](design-system/bruvet/MASTER.md) | Cores, fontes e regras visuais |
 
 ## Rodando com Docker
@@ -48,10 +48,37 @@ Variáveis de produção que podem ser definidas num arquivo `.env` ao lado do `
 | Veterinário | Módulos clínicos (exige CRMV no cadastro) |
 | Recepção | Módulos de atendimento ao público |
 
-O banco SQLite fica em um volume Docker (`bruvet-data` em produção, `bruvet-dev-data` em dev),
-então os dados sobrevivem a `docker compose down`. As migrations são aplicadas ao subir o backend.
+Os dois compose sobem um PostgreSQL próprio (serviço `db`), com os dados em volume Docker
+(`bruvet-pg` em produção, `bruvet-dev-pg` em dev), então eles sobrevivem a `docker compose down`.
+No dev, o Postgres fica exposto em `localhost:5432` (usuário/senha/banco `bruvet`). As migrations
+são aplicadas ao subir o backend.
+
+## Publicação na Vercel
+
+| Projeto Vercel | Pasta | Endereço |
+|---|---|---|
+| `bruvet-web` | `frontend/` | https://bruvet-web.vercel.app — use este |
+| `bruvet-api` | `backend/` | https://bruvet-api.vercel.app |
+
+- O banco é um Postgres **Neon** conectado ao projeto `bruvet-api` pelo painel (Storage), que cria
+  `DATABASE_URL` (com pooler, usada pela API) e `DATABASE_URL_UNPOOLED` (usada pelas migrations).
+- `bruvet-web` repassa `/api/*` para `bruvet-api` (`frontend/vercel.json`): o navegador só fala com
+  um domínio, e o cookie de sessão continua de primeira parte.
+- Cada deploy da API roda `npm run vercel-build`: gera o Prisma Client, **aplica as migrations
+  pendentes no Neon** e compila. A função fica em `backend/api/index.js` (região `gru1`, São Paulo).
+- Variáveis de produção em `bruvet-api`: `JWT_SECRET` (obrigatória), `ADMIN_EMAIL`,
+  `ADMIN_PASSWORD`, `COOKIE_SECURE=true`, `NODE_ENV=production`.
+
+Para publicar uma nova versão (CLI da Vercel ≥ 47.2.2, já logada):
+
+```bash
+cd backend  && vercel deploy --prod   # API (aplica migrations novas)
+cd frontend && vercel deploy --prod   # site
+```
 
 ## Rodando sem Docker
+
+Precisa de um Postgres acessível (ex.: `docker compose -f docker-compose.dev.yml up -d db`).
 
 ```bash
 # backend
@@ -77,16 +104,13 @@ npm run db:migrate -- --name descricao_da_mudanca   # cria e aplica a migration
 npm run db:studio                                    # interface visual para ver os dados
 ```
 
-| Migration | Etapa | Conteúdo |
-|---|---|---|
-| `20261123010009_create_users` | 1 | Tabela `users` |
-| `20261123011213_create_tutors_and_patients` | 2 | Tabelas `tutors` e `patients` |
-| `20261123012419_create_procedure_catalog` | 3 | Tabelas `procedure_categories`, `procedures` e `procedure_price_changes`, com as categorias iniciais |
-| `20261123013305_add_price_variants_and_patient_size` | 3 | Tabela `procedure_prices` (preço por espécie/porte), porte em `patients` e variação no histórico de preços |
+| Migration | Conteúdo |
+|---|---|
+| `20261123023808_init` | Schema completo das etapas 1 a 6 em PostgreSQL (usuários, tutores, pacientes, catálogo com variações de preço, estoque, atendimentos e pesagens), com as categorias iniciais do catálogo |
 
-| `20261123014122_create_stock` | 4 | Tabelas `medications`, `stock_batches` e `stock_movements` |
-| `20261123015119_create_attendances` | 5 | Tabelas `attendances`, `attendance_notes` e `attendance_procedures`; vínculo e estorno em `stock_movements` |
-| `20261123020508_create_patient_weights` | 6 | Tabela `patient_weights` (pesagens), preenchida com os pesos já existentes |
+As migrations das etapas 1 a 6 foram escritas para SQLite e substituídas por esta base ao migrar
+para PostgreSQL (o histórico delas continua no git). Novas mudanças de banco entram como novas
+migrations a partir daqui.
 
 ### Histórico do paciente
 

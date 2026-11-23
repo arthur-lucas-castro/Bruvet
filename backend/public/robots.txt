@@ -1,0 +1,3 @@
+# API do Bruvet: nada para indexar
+User-agent: *
+Disallow: /

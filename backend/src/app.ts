@@ -7,8 +7,9 @@ import { routes } from "./routes/index.js";
 
 export const app = express();
 
-// Confia no proxy da rede interna (nginx no Docker) para obter o IP real do cliente
-app.set("trust proxy", "loopback, uniquelocal");
+// IP real do cliente: na Vercel, um salto (o proxy dela); no Docker, o nginx da rede
+// interna. Usado pelo limite de tentativas de login.
+app.set("trust proxy", env.VERCEL ? 1 : "loopback, uniquelocal");
 app.disable("x-powered-by");
 
 const allowedOrigins = env.CORS_ORIGIN.split(",").map((o) => o.trim()).filter(Boolean);

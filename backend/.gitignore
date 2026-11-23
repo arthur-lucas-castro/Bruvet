@@ -4,3 +4,5 @@ dist
 src/generated
 data/*
 !data/.gitkeep
+
+.vercel

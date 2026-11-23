@@ -11,6 +11,12 @@ import { env } from "./env.js";
 function resolveJwtSecret(): string {
   if (env.JWT_SECRET) return env.JWT_SECRET;
 
+  // Na Vercel o disco é temporário e cada instância geraria um segredo diferente,
+  // derrubando as sessões a todo momento: o segredo precisa vir da configuração.
+  if (env.VERCEL) {
+    throw new Error("Defina JWT_SECRET nas variáveis de ambiente do projeto na Vercel.");
+  }
+
   const file = join(env.DATA_DIR, ".jwt-secret");
   if (existsSync(file)) return readFileSync(file, "utf8").trim();
 
