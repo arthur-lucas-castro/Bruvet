@@ -1,5 +1,5 @@
 // Função da Vercel: todas as rotas (/api/...) chegam aqui pelo rewrite do vercel.json.
-// Usa o código já compilado em dist/ pelo "vercel-build" (prisma generate + migrations + tsc).
+// Usa o código já compilado em dist/ pelo "build:vercel" (prisma generate + migrations + tsc).
 import { app } from "../dist/app.js";
 import { ensureAdmin } from "../dist/bootstrap/ensure-admin.js";
 

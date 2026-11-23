@@ -60,21 +60,46 @@ são aplicadas ao subir o backend.
 | `bruvet-web` | `frontend/` | https://bruvet-web.vercel.app — use este |
 | `bruvet-api` | `backend/` | https://bruvet-api.vercel.app |
 
-- O banco é um Postgres **Neon** conectado ao projeto `bruvet-api` pelo painel (Storage), que cria
-  `DATABASE_URL` (com pooler, usada pela API) e `DATABASE_URL_UNPOOLED` (usada pelas migrations).
-- `bruvet-web` repassa `/api/*` para `bruvet-api` (`frontend/vercel.json`): o navegador só fala com
-  um domínio, e o cookie de sessão continua de primeira parte.
-- Cada deploy da API roda `npm run vercel-build`: gera o Prisma Client, **aplica as migrations
-  pendentes no Neon** e compila. A função fica em `backend/api/index.js` (região `gru1`, São Paulo).
-- Variáveis de produção em `bruvet-api`: `JWT_SECRET` (obrigatória), `ADMIN_EMAIL`,
-  `ADMIN_PASSWORD`, `COOKIE_SECURE=true`, `NODE_ENV=production`.
+### Deploy automático pelo GitHub (`arthur-lucas-castro/Bruvet`)
 
-Para publicar uma nova versão (CLI da Vercel ≥ 47.2.2, já logada):
+| Push em | Resultado |
+|---|---|
+| `main` | Deploy de **produção** |
+| `releases/*` | Deploy de **prévia** (site de prévia → API de prévia → banco de prévia) |
+| qualquer outro branch | Nenhum deploy |
 
-```bash
-cd backend  && vercel deploy --prod   # API (aplica migrations novas)
-cd frontend && vercel deploy --prod   # site
-```
+- A regra fica em `scripts/vercel-ignore-build.mjs` (em `backend/` e `frontend/`). Cada projeto
+  também só republica quando a pasta dele mudou desde o último deploy daquele branch.
+- Prévias do site vivem atrás do login da Vercel; o repasse `/api` da prévia usa o segredo
+  `API_PROTECTION_BYPASS` (variável de Preview do `bruvet-web`) para chegar à prévia da API.
+
+### Bancos (Neon, projeto `neon-byzantium-ferry`, São Paulo)
+
+| Branch Neon | Usado por | Conteúdo |
+|---|---|---|
+| `main` | Produção | Dados reais (conectado pela integração da Vercel, só Production) |
+| `preview` | Prévias (`releases/*`) | Criado só com o schema, sem dados de produção |
+
+- A API usa `DATABASE_URL` (com pooler); as migrations usam `DATABASE_URL_UNPOOLED` (direta).
+- Cada deploy da API roda `npm run build:vercel`: gera o Prisma Client, aplica as migrations
+  pendentes (`scripts/vercel-migrate.mjs`) e compila. Migrations rodam sempre em produção e, em
+  prévia, só com `PREVIEW_DB_ISOLATED=true` — garantia de que uma prévia nunca altera o banco
+  de produção.
+- O frontend gera o roteamento no build (`frontend/scripts/vercel-build.mjs`): em produção `/api`
+  vai para `bruvet-api.vercel.app`; em prévia, para a prévia da API do mesmo branch.
+
+### Variáveis em `bruvet-api`
+
+| Variável | Production | Preview |
+|---|---|---|
+| `DATABASE_URL`, `DATABASE_URL_UNPOOLED` | Neon `main` (integração) | Neon `preview` |
+| `JWT_SECRET` | próprio | próprio (sessões não valem entre ambientes) |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | admin real | admin de teste |
+| `COOKIE_SECURE`, `NODE_ENV` | `true`, `production` | `true`, `production` |
+| `PREVIEW_DB_ISOLATED` | — | `true` |
+
+Deploy manual (raro; CLI da Vercel ≥ 47.2.2): `vercel deploy --prod` dentro de `backend/` ou
+`frontend/`.
 
 ## Rodando sem Docker
 

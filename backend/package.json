@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "prisma generate && tsx watch src/server.ts",
     "build": "prisma generate && tsc",
-    "vercel-build": "prisma generate && node scripts/vercel-migrate.mjs && tsc",
+    "build:vercel": "prisma generate && node scripts/vercel-migrate.mjs && tsc",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
     "db:generate": "prisma generate",
