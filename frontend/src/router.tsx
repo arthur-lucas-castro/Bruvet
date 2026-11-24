@@ -12,6 +12,7 @@ const tutors = () => import('./features/tutors/pages')
 const stock = () => import('./features/stock/pages')
 const attendances = () => import('./features/attendances/pages')
 const billing = () => import('./features/billing/pages')
+const shifts = () => import('./features/shifts/pages')
 
 export const router = createBrowserRouter([
   {
@@ -82,6 +83,13 @@ export const router = createBrowserRouter([
             lazy: async () => ({
               Component: (await import('./features/procedures/ProceduresPage')).ProceduresPage,
             }),
+          },
+
+          // ---------- Escala de plantões ----------
+          {
+            path: 'escala',
+            handle: handle('Escala'),
+            lazy: async () => ({ Component: (await shifts()).ShiftsPage }),
           },
 
           // ---------- Comandas e financeiro ----------

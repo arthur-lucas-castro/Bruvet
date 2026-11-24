@@ -8,6 +8,7 @@ import {
   procedureCategoriesRoutes,
   proceduresRoutes,
 } from "../modules/procedures/procedures.routes.js";
+import { shiftsRoutes } from "../modules/shifts/shifts.routes.js";
 import { medicationsRoutes, stockRoutes } from "../modules/stock/stock.routes.js";
 import { tutorsRoutes } from "../modules/tutors/tutors.routes.js";
 import { usersRoutes } from "../modules/users/users.routes.js";
@@ -30,3 +31,4 @@ routes.use("/bills", billsRoutes);
 routes.use("/payments", paymentsRoutes);
 routes.use("/finance", financeRoutes);
 routes.use("/settings", settingsRoutes);
+routes.use("/shifts", shiftsRoutes);

@@ -5,6 +5,7 @@ import { navItemsFor } from '../components/layout/nav-items'
 import { useAuthenticatedUser } from '../features/auth/auth-api'
 import { OpenAttendancesCard } from '../features/attendances/OpenAttendancesCard'
 import { FinanceSnapshotCard } from '../features/finance/FinanceSnapshotCard'
+import { OnDutyCard } from '../features/shifts/OnDutyCard'
 import { StockAlertsCard } from '../features/stock/StockAlertsCard'
 import { api } from '../lib/api'
 
@@ -57,6 +58,8 @@ export function DashboardPage() {
       </section>
 
       {user.role === 'admin' && <FinanceSnapshotCard />}
+
+      <OnDutyCard />
 
       <OpenAttendancesCard />
 

@@ -145,6 +145,23 @@ export function FinancePage() {
               value={formatCurrency(data.kpis.lossCostCents + data.kpis.internalUseCostCents)}
               hint={`Perdas ${formatCurrency(data.kpis.lossCostCents)} · interno ${formatCurrency(data.kpis.internalUseCostCents)}`}
             />
+            <Kpi
+              label="Equipe (plantões)"
+              value={formatCurrency(data.kpis.staffCostCents)}
+              hint={`${data.staff.shifts} realizado(s) · veterinários ${formatCurrency(data.staff.veterinariansCents)} · enfermagem ${formatCurrency(data.staff.nursesCents)}${data.kpis.staffScheduledCents ? ` · previsto ${formatCurrency(data.kpis.staffScheduledCents)}` : ''}`}
+              to="/escala?aba=pagamentos"
+            />
+            <Kpi
+              label="Plantões a pagar"
+              value={formatCurrency(data.kpis.staffPayableCents)}
+              hint="realizados e não pagos, de qualquer data"
+              to="/escala?aba=pagamentos"
+            />
+            <Kpi
+              label="Resultado"
+              value={formatCurrency(data.kpis.resultCents)}
+              hint="margem bruta − plantões − perdas e uso interno"
+            />
           </section>
 
           <Card title={`Receita × custo direto por ${data.period.granularity === 'mes' ? 'mês' : 'dia'}`}>

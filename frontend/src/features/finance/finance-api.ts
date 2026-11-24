@@ -31,7 +31,12 @@ export type FinanceSummary = {
     discountCents: number
     lossCostCents: number
     internalUseCostCents: number
+    staffCostCents: number
+    staffScheduledCents: number
+    staffPayableCents: number
+    resultCents: number
   }
+  staff: { shifts: number; absences: number; veterinariansCents: number; nursesCents: number }
   series: { key: string; revenueCents: number; costCents: number; receivedCents: number }[]
   categories: FinanceRow[]
   topProcedures: FinanceRow[]

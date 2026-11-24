@@ -2,12 +2,13 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { ApiError, api } from '../../lib/api'
 import { ME_QUERY_KEY, queryClient } from '../../lib/query-client'
 
-export const ROLES = ['admin', 'veterinario', 'recepcao'] as const
+export const ROLES = ['admin', 'veterinario', 'enfermeiro', 'recepcao'] as const
 export type Role = (typeof ROLES)[number]
 
 export const ROLE_LABELS: Record<Role, string> = {
   admin: 'Administrador',
   veterinario: 'Veterinário',
+  enfermeiro: 'Enfermagem',
   recepcao: 'Recepção',
 }
 

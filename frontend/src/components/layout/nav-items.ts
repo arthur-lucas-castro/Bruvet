@@ -1,4 +1,5 @@
 import {
+  CalendarClock,
   ChartColumn,
   ClipboardList,
   Contact,
@@ -25,6 +26,7 @@ export const navItems: NavItem[] = [
   { to: '/pacientes', label: 'Pacientes', icon: PawPrint },
   { to: '/tutores', label: 'Tutores', icon: Contact },
   { to: '/atendimentos', label: 'Atendimentos', icon: Stethoscope },
+  { to: '/escala', label: 'Escala', icon: CalendarClock },
   { to: '/comandas', label: 'Comandas', icon: Receipt },
   { to: '/estoque', label: 'Estoque', icon: Pill },
   { to: '/procedimentos', label: 'Procedimentos', icon: ClipboardList },

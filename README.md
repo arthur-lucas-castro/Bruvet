@@ -46,6 +46,7 @@ Variáveis de produção que podem ser definidas num arquivo `.env` ao lado do `
 |---|---|
 | Administrador | Tudo, incluindo a gestão de usuários |
 | Veterinário | Módulos clínicos (exige CRMV no cadastro) |
+| Enfermagem | Consulta pacientes, atendimentos, estoque e a escala; cobra comandas (sem ficha clínica) |
 | Recepção | Módulos de atendimento ao público |
 
 Os dois compose sobem um PostgreSQL próprio (serviço `db`), com os dados em volume Docker
@@ -133,6 +134,7 @@ npm run db:studio                                    # interface visual para ver
 |---|---|
 | `20261123023808_init` | Schema completo das etapas 1 a 6 em PostgreSQL (usuários, tutores, pacientes, catálogo com variações de preço, estoque, atendimentos e pesagens), com as categorias iniciais do catálogo |
 | `20261123033139_create_billing` | Comandas, itens avulsos, pagamentos e configurações; custo nos procedimentos e nas saídas de estoque; preço de venda nos medicamentos. Cria a comanda dos atendimentos existentes e o limite de desconto (10%) |
+| `20261124014951_create_shifts` | Escala de plantões (`shifts`) e valor padrão do plantão por profissional e tipo (`shift_rates`) |
 
 As migrations das etapas 1 a 6 foram escritas para SQLite e substituídas por esta base ao migrar
 para PostgreSQL (o histórico delas continua no git). Novas mudanças de banco entram como novas
@@ -154,6 +156,25 @@ migrations a partir daqui.
   recebido, a receber, descontos, perdas e uso interno, receita × custo por dia/mês, quebras por
   categoria, procedimento, veterinário, espécie e forma de pagamento, valor em estoque. Avisa
   quando faltam custos cadastrados (margem incompleta).
+
+### Escala de plantões
+
+- `/escala`: semana da equipe (veterinários, enfermagem e admins com CRMV), com filtro por
+  profissional e equipe. O painel inicial mostra quem está de plantão agora e quem entra hoje.
+- Tipos: diurno (07–19h), noturno (19–07h) e 24 horas; os horários podem ser ajustados. Um
+  plantão pode ser repetido toda semana em dias escolhidos (até 62 de uma vez). O sistema
+  impede o mesmo profissional em dois plantões ao mesmo tempo.
+- **Valor**: cada profissional tem um valor padrão por tipo (aba "Valores por profissional"),
+  copiado para o plantão ao escalar e ajustável nele.
+- **Situação**: agendado → em andamento → realizado (terminou), ou falta. Só realizados contam
+  como custo e podem ser pagos.
+- **Pagamento** (aba "Pagamentos"): totais do mês por profissional (realizado, pago, a pagar,
+  previsto) e registro do pagamento; plantão pago não muda de horário/valor nem é excluído sem
+  antes desfazer o pagamento.
+- **Permissões**: só o admin monta a escala, define valores e paga. A equipe vê os horários de
+  todos; cada um vê o valor apenas dos próprios plantões e o resumo do mês.
+- **Financeiro**: custo de equipe (plantões realizados no período), plantões a pagar e
+  resultado (margem bruta − plantões − perdas e uso interno).
 
 ### Histórico do paciente
 

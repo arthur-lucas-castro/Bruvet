@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { prisma } from "../../lib/prisma.js";
 import { computeBillTotals, isChargedMedication, medicationLineTotal } from "../billing/bill-totals.js";
+import { shiftState } from "../shifts/shift-kinds.js";
 import { isExpired, todayUtc } from "../stock/stock-summary.js";
 
 /**
@@ -9,6 +10,8 @@ import { isExpired, todayUtc } from "../stock/stock-summary.js";
  * - Recebimentos, pela data do pagamento.
  * - Perdas e uso interno de estoque, pela data da movimentação.
  * - "A receber" considera todas as comandas abertas, de qualquer data.
+ * - Plantões, pela data de início: realizados (terminados, sem falta) são custo de equipe;
+ *   os ainda por acontecer no período aparecem como previstos. "A pagar" é de qualquer data.
  */
 export const financeQuerySchema = z.object({
   from: z.coerce.date("Data inicial inválida"),
@@ -36,7 +39,7 @@ export const financeService = {
       return monthly ? key.slice(0, 7) : key;
     };
 
-    const [attendances, payments, otherMovements, openBills, batches] = await Promise.all([
+    const [attendances, payments, otherMovements, openBills, batches, shifts, unpaidShifts] = await Promise.all([
       prisma.attendance.findMany({
         where: { startedAt: range, status: { not: "cancelado" } },
         select: {
@@ -113,6 +116,14 @@ export const financeService = {
       prisma.stockBatch.findMany({
         where: { quantity: { gt: 0 } },
         select: { quantity: true, unitCostCents: true, expiresAt: true },
+      }),
+      prisma.shift.findMany({
+        where: { startsAt: range },
+        select: { status: true, startsAt: true, endsAt: true, amountCents: true, user: { select: { role: true } } },
+      }),
+      prisma.shift.findMany({
+        where: { paidAt: null, status: "escalado", endsAt: { lte: new Date() } },
+        select: { amountCents: true },
       }),
     ]);
 
@@ -276,6 +287,21 @@ export const financeService = {
       else stockValueCents += value;
     }
 
+    // ---------- Equipe (plantões) ----------
+    const now = new Date();
+    const staff = { costCents: 0, scheduledCents: 0, shifts: 0, absences: 0, vetCents: 0, nurseCents: 0 };
+    for (const s of shifts) {
+      const state = shiftState(s, now);
+      if (state === "falta") staff.absences++;
+      else if (state === "realizado") {
+        staff.costCents += s.amountCents;
+        staff.shifts++;
+        if (s.user.role === "enfermeiro") staff.nurseCents += s.amountCents;
+        else staff.vetCents += s.amountCents;
+      } else staff.scheduledCents += s.amountCents;
+    }
+    const staffPayableCents = unpaidShifts.reduce((t, s) => t + s.amountCents, 0);
+
     const directCostCents = totals.medicationCostCents + totals.procedureCostCents;
     const grossMarginCents = totals.revenueCents - directCostCents;
     const withMargin = (r: Row) => ({ ...r, marginCents: r.revenueCents - r.costCents });
@@ -299,6 +325,17 @@ export const financeService = {
         discountCents: totals.discountCents,
         lossCostCents,
         internalUseCostCents,
+        staffCostCents: staff.costCents,
+        staffScheduledCents: staff.scheduledCents,
+        staffPayableCents,
+        /** Margem bruta − plantões realizados − perdas e uso interno de estoque */
+        resultCents: grossMarginCents - staff.costCents - lossCostCents - internalUseCostCents,
+      },
+      staff: {
+        shifts: staff.shifts,
+        absences: staff.absences,
+        veterinariansCents: staff.vetCents,
+        nursesCents: staff.nurseCents,
       },
       series: [...buckets.values()].sort((a, b) => a.key.localeCompare(b.key)),
       categories: categoryRows.map(withMargin).sort(byRevenue),

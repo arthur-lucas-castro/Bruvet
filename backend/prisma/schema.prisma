@@ -20,7 +20,7 @@ model User {
   name               String
   email              String   @unique
   passwordHash       String
-  /// "admin" | "veterinario" | "recepcao" — validado em src/modules/users/roles.ts
+  /// "admin" | "veterinario" | "enfermeiro" | "recepcao" — validado em src/modules/users/roles.ts
   role               String
   /// Registro no Conselho Regional de Medicina Veterinária (obrigatório para veterinários)
   crmv               String?
@@ -44,6 +44,10 @@ model User {
   paymentsReceived      Payment[]              @relation("PaymentReceivedBy")
   paymentsVoided        Payment[]              @relation("PaymentVoidedBy")
   settingsUpdated       Setting[]
+  shiftRates            ShiftRate[]
+  shifts                Shift[]                @relation("ShiftProfessional")
+  shiftsCreated         Shift[]                @relation("ShiftCreatedBy")
+  shiftsPaid            Shift[]                @relation("ShiftPaidBy")
 
   @@map("users")
 }
@@ -502,4 +506,49 @@ model Setting {
   updatedAt   DateTime @updatedAt
 
   @@map("settings")
+}
+
+// ---------- Escala de plantões ----------
+
+/// Valor padrão do plantão de cada profissional por tipo; copiado para o plantão ao escalar.
+model ShiftRate {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// "diurno" | "noturno" | "24h" — ver src/modules/shifts/shift-kinds.ts
+  kind        String
+  amountCents Int
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, kind])
+  @@map("shift_rates")
+}
+
+/// Plantão escalado. Realizado = terminou e não é falta; entra como custo de equipe no financeiro.
+model Shift {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation("ShiftProfessional", fields: [userId], references: [id], onDelete: Restrict)
+  /// "diurno" | "noturno" | "24h"
+  kind         String
+  startsAt     DateTime
+  endsAt       DateTime
+  /// Valor do plantão (centavos), copiado do valor padrão do profissional e ajustável
+  amountCents  Int
+  /// "escalado" | "falta"
+  status       String    @default("escalado")
+  notes        String?
+  /// Pagamento ao profissional (só o admin marca)
+  paidAt       DateTime?
+  paidById     String?
+  paidBy       User?     @relation("ShiftPaidBy", fields: [paidById], references: [id], onDelete: Restrict)
+  paymentNotes String?
+  createdById  String
+  createdBy    User      @relation("ShiftCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([startsAt])
+  @@index([userId, startsAt])
+  @@map("shifts")
 }
