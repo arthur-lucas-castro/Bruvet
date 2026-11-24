@@ -39,6 +39,11 @@ model User {
   attendanceNotes       AttendanceNote[]
   attendanceProcedures  AttendanceProcedure[]
   patientWeights        PatientWeight[]
+  billDiscounts         Bill[]                 @relation("BillDiscountBy")
+  billItems             BillItem[]
+  paymentsReceived      Payment[]              @relation("PaymentReceivedBy")
+  paymentsVoided        Payment[]              @relation("PaymentVoidedBy")
+  settingsUpdated       Setting[]
 
   @@map("users")
 }
@@ -138,6 +143,8 @@ model Procedure {
   preparation     String?
   /// Valor padrão em centavos (R$ 150,00 = 15000), usado quando nenhuma variação se aplica
   priceCents      Int
+  /// Custo direto estimado por execução (centavos): materiais, terceiros etc. Só o admin vê.
+  costCents       Int?
   durationMinutes Int?
   /// Inativo = não aparece para novos atendimentos, mas continua no histórico
   active          Boolean                @default(true)
@@ -214,6 +221,9 @@ model Medication {
   minStock         Float           @default(0)
   /// Medicamento controlado (Portaria 344): saídas exigem justificativa
   controlled       Boolean         @default(false)
+  /// Preço de venda por unidade (centavos). Preenchido = o uso em atendimento é cobrado na
+  /// comanda; vazio = entra só como custo (já incluído no procedimento).
+  salePriceCents   Int?
   notes            String?
   active           Boolean         @default(true)
   /// Nome, princípio ativo e fabricante normalizados para a busca
@@ -251,33 +261,38 @@ model StockBatch {
 
 /// Toda alteração de saldo. Nunca é editada nem apagada (trilha de auditoria).
 model StockMovement {
-  id           String         @id @default(cuid())
+  id             String         @id @default(cuid())
   /// "entrada" | "saida" | "ajuste" | "perda" | "estorno"
-  type         String
+  type           String
   /// Variação do saldo do lote: positiva em entradas, negativa em saídas e perdas
-  quantity     Float
+  quantity       Float
   /// Saldo do lote logo após a movimentação
-  balanceAfter Float
-  reason       String?
-  medicationId String
-  medication   Medication     @relation(fields: [medicationId], references: [id], onDelete: Restrict)
-  batchId      String
-  batch        StockBatch     @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  balanceAfter   Float
+  reason         String?
+  medicationId   String
+  medication     Medication     @relation(fields: [medicationId], references: [id], onDelete: Restrict)
+  batchId        String
+  batch          StockBatch     @relation(fields: [batchId], references: [id], onDelete: Restrict)
   /// Paciente que recebeu o medicamento (saídas)
-  patientId    String?
-  patient      Patient?       @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  patientId      String?
+  patient        Patient?       @relation(fields: [patientId], references: [id], onDelete: Restrict)
   /// Atendimento em que o medicamento foi usado (Etapa 5)
-  attendanceId String?
-  attendance   Attendance?    @relation(fields: [attendanceId], references: [id], onDelete: Restrict)
+  attendanceId   String?
+  attendance     Attendance?    @relation(fields: [attendanceId], references: [id], onDelete: Restrict)
   /// Estorno: aponta para a saída desfeita (cada saída só pode ser estornada uma vez)
-  reversalOfId String?        @unique
-  reversalOf   StockMovement? @relation("StockReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
-  reversedBy   StockMovement? @relation("StockReversal")
-  userId       String
-  user         User           @relation(fields: [userId], references: [id], onDelete: Restrict)
-  createdAt    DateTime       @default(now())
+  reversalOfId   String?        @unique
+  reversalOf     StockMovement? @relation("StockReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversedBy     StockMovement? @relation("StockReversal")
+  /// Custo unitário do lote no momento da movimentação (centavos), para o financeiro
+  unitCostCents  Int?
+  /// Preço de venda unitário cobrado na comanda (saídas em atendimento; null = não cobrado)
+  salePriceCents Int?
+  userId         String
+  user           User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  createdAt      DateTime       @default(now())
 
   @@index([medicationId, createdAt])
+  @@index([type, createdAt])
   @@index([patientId])
   @@index([attendanceId])
   @@map("stock_movements")
@@ -338,6 +353,7 @@ model Attendance {
   procedures     AttendanceProcedure[]
   stockMovements StockMovement[]
   weight         PatientWeight?
+  bill           Bill?
   createdAt      DateTime              @default(now())
   updatedAt      DateTime              @updatedAt
 
@@ -371,6 +387,8 @@ model AttendanceProcedure {
   name         String
   /// Preço unitário aplicado (centavos), já considerando espécie/porte
   priceCents   Int
+  /// Custo direto unitário copiado do catálogo no lançamento (centavos)
+  costCents    Int?
   quantity     Int        @default(1)
   /// Variação de preço aplicada (null/null = valor padrão)
   species      String?
@@ -403,4 +421,85 @@ model PatientWeight {
 
   @@index([patientId, recordedAt])
   @@map("patient_weights")
+}
+
+// ---------- Comanda e financeiro ----------
+
+/// Comanda: o que deve ser cobrado do tutor por um atendimento. O total é calculado a partir
+/// dos procedimentos, dos medicamentos com preço de venda e dos itens avulsos, menos o desconto.
+model Bill {
+  id             String     @id @default(cuid())
+  attendanceId   String     @unique
+  attendance     Attendance @relation(fields: [attendanceId], references: [id], onDelete: Restrict)
+  /// "aberta" | "paga" | "cancelada" — recalculado a cada mudança (ver billing.service.ts)
+  status         String     @default("aberta")
+  /// Desconto em centavos sobre o subtotal
+  discountCents  Int        @default(0)
+  discountReason String?
+  discountById   String?
+  discountBy     User?      @relation("BillDiscountBy", fields: [discountById], references: [id], onDelete: Restrict)
+  discountAt     DateTime?
+  /// Quando ficou totalmente paga
+  paidAt         DateTime?
+  items          BillItem[]
+  payments       Payment[]
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@index([status])
+  @@map("bills")
+}
+
+/// Item avulso da comanda (produto, taxa, serviço fora do catálogo)
+model BillItem {
+  id             String   @id @default(cuid())
+  billId         String
+  bill           Bill     @relation(fields: [billId], references: [id], onDelete: Cascade)
+  description    String
+  quantity       Int      @default(1)
+  unitPriceCents Int
+  addedById      String
+  addedBy        User     @relation(fields: [addedById], references: [id], onDelete: Restrict)
+  createdAt      DateTime @default(now())
+
+  @@index([billId])
+  @@map("bill_items")
+}
+
+/// Pagamento recebido. Não é apagado: um estorno marca voidedAt (só o admin).
+model Payment {
+  id           String    @id @default(cuid())
+  billId       String
+  bill         Bill      @relation(fields: [billId], references: [id], onDelete: Restrict)
+  amountCents  Int
+  /// "dinheiro" | "pix" | "debito" | "credito" | "outro"
+  method       String
+  /// Parcelas no crédito
+  installments Int?
+  notes        String?
+  /// Pagamentos lançados juntos (várias comandas do mesmo tutor) compartilham o grupo
+  groupId      String?
+  receivedById String
+  receivedBy   User      @relation("PaymentReceivedBy", fields: [receivedById], references: [id], onDelete: Restrict)
+  receivedAt   DateTime  @default(now())
+  voidedAt     DateTime?
+  voidedById   String?
+  voidedBy     User?     @relation("PaymentVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict)
+  voidReason   String?
+
+  @@index([billId])
+  @@index([receivedAt])
+  @@index([groupId])
+  @@map("payments")
+}
+
+/// Configurações do sistema editáveis pelo admin (chave/valor)
+model Setting {
+  key         String   @id
+  value       String
+  updatedById String?
+  updatedBy   User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime @updatedAt
+
+  @@map("settings")
 }

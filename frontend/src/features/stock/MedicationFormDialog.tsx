@@ -8,7 +8,8 @@ import { Button } from '../../components/ui/Button'
 import { Dialog } from '../../components/ui/Dialog'
 import { Checkbox, Field, Input, Select, Textarea } from '../../components/ui/Field'
 import { applyServerErrors } from '../../lib/form-errors'
-import { parseDecimal } from '../../lib/format'
+import { centsToInput, inputToCents, parseDecimal } from '../../lib/format'
+import { useAuthenticatedUser } from '../auth/auth-api'
 import { useSaveMedication, type Medication } from './stock-api'
 import { UNITS, UNIT_LABELS, formatNumber, type Unit } from './units'
 
@@ -38,6 +39,11 @@ const schema = z.object({
     return n === null || (Number.isFinite(n) && n >= 0)
   }, 'Informe um número, ex.: 20'),
   controlled: z.boolean(),
+  salePrice: z.string().refine((v) => {
+    if (!v.trim()) return true
+    const c = inputToCents(v)
+    return c !== null && Number.isFinite(c) && c >= 0
+  }, 'Informe o preço, ex.: 5,00'),
   notes: z.string(),
   active: z.boolean(),
 })
@@ -62,6 +68,7 @@ export function MedicationFormDialog({ open, onClose, medication }: MedicationFo
 
 function MedicationForm({ medication, onDone }: { medication?: Medication; onDone: () => void }) {
   const navigate = useNavigate()
+  const isAdmin = useAuthenticatedUser().role === 'admin'
   const saveMedication = useSaveMedication()
   const [formError, setFormError] = useState<string | null>(null)
 
@@ -81,6 +88,7 @@ function MedicationForm({ medication, onDone }: { medication?: Medication; onDon
       unit: medication?.unit ?? '',
       minStock: medication?.minStock ? formatNumber(medication.minStock) : '',
       controlled: medication?.controlled ?? false,
+      salePrice: centsToInput(medication?.salePriceCents),
       notes: medication?.notes ?? '',
       active: medication?.active ?? true,
     },
@@ -99,6 +107,8 @@ function MedicationForm({ medication, onDone }: { medication?: Medication; onDon
         unit: values.unit as Unit,
         minStock: parseDecimal(values.minStock) ?? 0,
         controlled: values.controlled,
+        // Só o admin altera; para os demais o backend mantém o preço atual
+        salePriceCents: values.salePrice.trim() ? inputToCents(values.salePrice) : null,
         notes: values.notes || null,
         active: values.active,
       })
@@ -168,6 +178,16 @@ function MedicationForm({ medication, onDone }: { medication?: Medication; onDon
         >
           {(a11y) => <Input {...a11y} {...register('minStock')} inputMode="decimal" className="font-mono" />}
         </Field>
+        {isAdmin && (
+          <Field
+            label={`Preço de venda por ${medication ? UNIT_LABELS[medication.unit].one : 'unidade'} (R$, opcional)`}
+            error={errors.salePrice?.message}
+            hint="Preenchido: o uso em atendimento é cobrado na comanda. Vazio: entra só como custo."
+            className="sm:col-span-2"
+          >
+            {(a11y) => <Input {...a11y} {...register('salePrice')} inputMode="decimal" placeholder="0,00" className="font-mono" />}
+          </Field>
+        )}
       </div>
 
       <Checkbox

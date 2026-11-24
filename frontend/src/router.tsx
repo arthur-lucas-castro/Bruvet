@@ -11,6 +11,7 @@ const patients = () => import('./features/patients/pages')
 const tutors = () => import('./features/tutors/pages')
 const stock = () => import('./features/stock/pages')
 const attendances = () => import('./features/attendances/pages')
+const billing = () => import('./features/billing/pages')
 
 export const router = createBrowserRouter([
   {
@@ -81,6 +82,32 @@ export const router = createBrowserRouter([
             lazy: async () => ({
               Component: (await import('./features/procedures/ProceduresPage')).ProceduresPage,
             }),
+          },
+
+          // ---------- Comandas e financeiro ----------
+          {
+            path: 'comandas',
+            handle: handle('Comandas'),
+            lazy: async () => ({ Component: (await billing()).BillsPage }),
+          },
+          {
+            path: 'comandas/:id',
+            handle: handle('Comanda'),
+            lazy: async () => ({ Component: (await billing()).BillPage }),
+          },
+          {
+            path: 'financeiro',
+            handle: handle('Financeiro'),
+            lazy: async () => {
+              const { FinancePage } = await import('./features/finance/FinancePage')
+              return {
+                element: (
+                  <RequireRole roles={['admin']}>
+                    <FinancePage />
+                  </RequireRole>
+                ),
+              }
+            },
           },
 
           // ---------- Estoque ----------

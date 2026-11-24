@@ -19,6 +19,14 @@ export const medicationSchema = z.object({
   unit: z.enum(UNITS, "Selecione a unidade"),
   minStock: quantity("Estoque mínimo inválido").pipe(z.number().min(0, "Não pode ser negativo")).default(0),
   controlled: z.boolean().default(false),
+  /** Preço de venda por unidade; vazio = não é cobrado à parte na comanda */
+  salePriceCents: z
+    .number("Preço inválido")
+    .int("Preço inválido")
+    .min(0, "Preço inválido")
+    .max(100_000_000)
+    .nullish()
+    .transform((v) => v ?? null),
   notes: optionalText(1000),
   active: z.boolean().default(true),
 });

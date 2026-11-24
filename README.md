@@ -132,10 +132,28 @@ npm run db:studio                                    # interface visual para ver
 | Migration | Conteúdo |
 |---|---|
 | `20261123023808_init` | Schema completo das etapas 1 a 6 em PostgreSQL (usuários, tutores, pacientes, catálogo com variações de preço, estoque, atendimentos e pesagens), com as categorias iniciais do catálogo |
+| `20261123033139_create_billing` | Comandas, itens avulsos, pagamentos e configurações; custo nos procedimentos e nas saídas de estoque; preço de venda nos medicamentos. Cria a comanda dos atendimentos existentes e o limite de desconto (10%) |
 
 As migrations das etapas 1 a 6 foram escritas para SQLite e substituídas por esta base ao migrar
 para PostgreSQL (o histórico delas continua no git). Novas mudanças de banco entram como novas
 migrations a partir daqui.
+
+### Comanda e financeiro
+
+- **Comanda**: uma por atendimento, criada junto com ele. Total = procedimentos (preço gravado no
+  lançamento) + medicamentos com preço de venda + itens avulsos − desconto. Situação recalculada a
+  cada mudança: em aberto, paga ou cancelada (atendimento cancelado).
+- **Cobrança (todos os perfis)**: pagamentos parciais em dinheiro, Pix, débito, crédito (parcelas)
+  ou outro; quitação conjunta das comandas abertas do mesmo tutor. Estorno de pagamento só pelo
+  admin (o registro fica, marcado como estornado).
+- **Desconto**: todos os perfis, com motivo; veterinário e recepção até o limite configurado
+  (padrão 10%), acima disso só o admin.
+- **Custos**: custo do lote gravado em cada saída de estoque; custo direto opcional por
+  procedimento (visível só ao admin); preço de venda dos medicamentos definido só pelo admin.
+- **Financeiro (`/financeiro`, só admin)**: faturamento, custo direto, margem bruta, ticket médio,
+  recebido, a receber, descontos, perdas e uso interno, receita × custo por dia/mês, quebras por
+  categoria, procedimento, veterinário, espécie e forma de pagamento, valor em estoque. Avisa
+  quando faltam custos cadastrados (margem incompleta).
 
 ### Histórico do paciente
 

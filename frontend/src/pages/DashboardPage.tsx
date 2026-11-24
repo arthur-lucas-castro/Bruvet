@@ -4,6 +4,7 @@ import { Link } from 'react-router'
 import { navItemsFor } from '../components/layout/nav-items'
 import { useAuthenticatedUser } from '../features/auth/auth-api'
 import { OpenAttendancesCard } from '../features/attendances/OpenAttendancesCard'
+import { FinanceSnapshotCard } from '../features/finance/FinanceSnapshotCard'
 import { StockAlertsCard } from '../features/stock/StockAlertsCard'
 import { api } from '../lib/api'
 
@@ -54,6 +55,8 @@ export function DashboardPage() {
           <ApiStatus />
         </div>
       </section>
+
+      {user.role === 'admin' && <FinanceSnapshotCard />}
 
       <OpenAttendancesCard />
 

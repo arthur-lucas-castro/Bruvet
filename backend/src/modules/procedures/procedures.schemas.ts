@@ -46,6 +46,14 @@ export const procedureSchema = z.object({
     .refine((list) => new Set(list.map(variantKey)).size === list.length, {
       message: "Há variações repetidas (mesma espécie e porte)",
     }),
+  /** Custo direto estimado por execução (materiais, terceiros); só o admin vê */
+  costCents: z
+    .number("Custo inválido")
+    .int("Custo inválido")
+    .min(0, "O custo não pode ser negativo")
+    .max(100_000_000)
+    .nullish()
+    .transform((v) => v ?? null),
   durationMinutes: z
     .number("Duração inválida")
     .int("Informe minutos inteiros")

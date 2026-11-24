@@ -14,6 +14,7 @@ export const procedureFormSchema = z
     code: z.string().trim().max(20, 'Máximo de 20 caracteres'),
     categoryId: z.string().min(1, 'Selecione a categoria'),
     price: z.string().refine(isValidPrice, 'Informe o valor, ex.: 150,00'),
+    cost: z.string().refine((v) => !v.trim() || isValidPrice(v), 'Informe o custo, ex.: 25,00'),
     duration: z
       .string()
       .refine(

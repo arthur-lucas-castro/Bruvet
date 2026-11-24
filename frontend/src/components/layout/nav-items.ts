@@ -1,9 +1,11 @@
 import {
+  ChartColumn,
   ClipboardList,
   Contact,
   LayoutDashboard,
   PawPrint,
   Pill,
+  Receipt,
   Stethoscope,
   UsersRound,
   type LucideIcon,
@@ -23,8 +25,10 @@ export const navItems: NavItem[] = [
   { to: '/pacientes', label: 'Pacientes', icon: PawPrint },
   { to: '/tutores', label: 'Tutores', icon: Contact },
   { to: '/atendimentos', label: 'Atendimentos', icon: Stethoscope },
+  { to: '/comandas', label: 'Comandas', icon: Receipt },
   { to: '/estoque', label: 'Estoque', icon: Pill },
   { to: '/procedimentos', label: 'Procedimentos', icon: ClipboardList },
+  { to: '/financeiro', label: 'Financeiro', icon: ChartColumn, roles: ['admin'] },
   { to: '/usuarios', label: 'Usuários', icon: UsersRound, roles: ['admin'] },
 ]
 

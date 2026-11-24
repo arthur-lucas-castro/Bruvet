@@ -118,6 +118,8 @@ function invalidate(id?: string) {
       ? queryClient.invalidateQueries({ queryKey: attendanceKeys.detail(id) })
       : Promise.resolve(),
     queryClient.invalidateQueries({ queryKey: ['attendances', 'list'] }),
+    // A comanda soma os procedimentos e medicamentos do atendimento
+    queryClient.invalidateQueries({ queryKey: ['bills'] }),
   ])
 }
 

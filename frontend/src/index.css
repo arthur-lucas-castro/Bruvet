@@ -24,6 +24,8 @@
   /* Gráficos: teal mais saturado que o primary, validado (croma e contraste) pelo
      validador da skill dataviz contra fundo claro */
   --color-chart-1: #0d9488;
+  /* 2ª série (ex.: custo ao lado da receita); par validado, inclusive para daltonismo */
+  --color-chart-2: #7c3aed;
   --color-chart-grid: #e2e8f0;
 }
 

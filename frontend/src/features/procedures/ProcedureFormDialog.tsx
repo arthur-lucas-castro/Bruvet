@@ -56,6 +56,7 @@ export function ProcedureFormDialog({
 // Campos da API que têm outro nome no formulário
 const serverFieldMap: Record<string, keyof ProcedureFormValues> = {
   priceCents: 'price',
+  costCents: 'cost',
   durationMinutes: 'duration',
   prices: 'variants',
 }
@@ -87,6 +88,7 @@ function ProcedureForm({
       code: procedure?.code ?? '',
       categoryId: procedure?.categoryId ?? defaultCategoryId ?? '',
       price: centsToInput(procedure?.priceCents),
+      cost: centsToInput(procedure?.costCents),
       duration: procedure?.durationMinutes ? String(procedure.durationMinutes) : '',
       description: procedure?.description ?? '',
       preparation: procedure?.preparation ?? '',
@@ -110,6 +112,7 @@ function ProcedureForm({
         code: values.code || null,
         categoryId: values.categoryId,
         priceCents: inputToCents(values.price) ?? 0,
+        costCents: values.cost.trim() ? inputToCents(values.cost) : null,
         prices: values.variants.map(toVariantInput),
         durationMinutes: values.duration ? Number(values.duration) : null,
         description: values.description || null,
@@ -163,6 +166,23 @@ function ProcedureForm({
               {...a11y}
               {...register('price', {
                 onBlur: (e) => setValue('price', formatPrice(e.target.value)),
+              })}
+              inputMode="decimal"
+              placeholder="0,00"
+              className="text-right font-mono"
+            />
+          )}
+        </Field>
+        <Field
+          label="Custo direto (R$, opcional)"
+          error={errors.cost?.message}
+          hint="Materiais, terceiros etc. por execução. Usado no financeiro; não aparece para a equipe."
+        >
+          {(a11y) => (
+            <Input
+              {...a11y}
+              {...register('cost', {
+                onBlur: (e) => setValue('cost', e.target.value.trim() ? formatPrice(e.target.value) : ''),
               })}
               inputMode="decimal"
               placeholder="0,00"

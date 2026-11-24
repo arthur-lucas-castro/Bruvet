@@ -21,10 +21,12 @@ export const stockController = {
     res.json(await stockService.get(req.params.id));
   },
   async create(req: Request, res: Response) {
-    res.status(201).json(await stockService.create(medicationSchema.parse(req.body)));
+    const isAdmin = currentUser(req).role === "admin";
+    res.status(201).json(await stockService.create(medicationSchema.parse(req.body), isAdmin));
   },
   async update(req: IdRequest, res: Response) {
-    res.json(await stockService.update(req.params.id, medicationSchema.parse(req.body)));
+    const isAdmin = currentUser(req).role === "admin";
+    res.json(await stockService.update(req.params.id, medicationSchema.parse(req.body), isAdmin));
   },
   async movements(req: IdRequest, res: Response) {
     res.json(await stockService.movements(req.params.id, paginationSchema.parse(req.query)));

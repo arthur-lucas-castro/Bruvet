@@ -23,12 +23,20 @@ export const categoriesController = {
   },
 };
 
+/** O custo dos procedimentos é informação financeira: só o admin recebe. */
+function hideCost<T extends { costCents?: number | null }>(req: Request, procedure: T): T {
+  if (currentUser(req).role === "admin") return procedure;
+  const { costCents: _costCents, ...rest } = procedure;
+  return rest as T;
+}
+
 export const proceduresController = {
   async list(req: Request, res: Response) {
-    res.json(await proceduresService.list(listProceduresSchema.parse(req.query)));
+    const result = await proceduresService.list(listProceduresSchema.parse(req.query));
+    res.json({ ...result, items: result.items.map((p) => hideCost(req, p)) });
   },
   async get(req: IdRequest, res: Response) {
-    res.json(await proceduresService.get(req.params.id));
+    res.json(hideCost(req, await proceduresService.get(req.params.id)));
   },
   async price(req: IdRequest, res: Response) {
     const { patientId } = z.object({ patientId: z.string().min(1) }).parse(req.query);

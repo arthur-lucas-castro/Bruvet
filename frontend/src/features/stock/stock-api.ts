@@ -25,6 +25,8 @@ export type Medication = {
   unit: Unit
   minStock: number
   controlled: boolean
+  /** Preço de venda por unidade (null = não cobrado à parte) */
+  salePriceCents: number | null
   notes: string | null
   active: boolean
   createdAt: string

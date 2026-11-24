@@ -79,12 +79,20 @@ export const stockService = {
     };
   },
 
-  create(input: MedicationInput) {
-    return prisma.medication.create({ data: { ...input, searchText: medicationSearchText(input) } });
+  /** Preço de venda é decisão comercial: só o admin define (os demais perfis não alteram). */
+  create(input: MedicationInput, isAdmin: boolean) {
+    return prisma.medication.create({
+      data: {
+        ...input,
+        salePriceCents: isAdmin ? input.salePriceCents : null,
+        searchText: medicationSearchText(input),
+      },
+    });
   },
 
-  async update(id: string, input: MedicationInput) {
+  async update(id: string, input: MedicationInput, isAdmin: boolean) {
     const current = await findMedicationOrFail(id);
+    if (!isAdmin) input = { ...input, salePriceCents: current.salePriceCents };
     if (current.unit !== input.unit) {
       const movements = await prisma.stockMovement.count({ where: { medicationId: id } });
       if (movements > 0) {
@@ -244,6 +252,10 @@ export const stockService = {
               batchId: batch.id,
               patientId: input.patientId ?? null,
               attendanceId: context.attendanceId ?? null,
+              // Custo do lote para o financeiro; preço de venda só quando o uso em
+              // atendimento é cobrado na comanda (medicamento com preço de venda)
+              unitCostCents: batch.unitCostCents,
+              salePriceCents: context.attendanceId ? medication.salePriceCents : null,
               userId,
             },
             include: { batch: { select: { batchNumber: true } } },
@@ -284,6 +296,7 @@ export const stockService = {
           patientId: movement.patientId,
           attendanceId: movement.attendanceId,
           reversalOfId: movement.id,
+          unitCostCents: movement.unitCostCents,
           userId,
         },
       });
@@ -323,6 +336,7 @@ export const stockService = {
           reason: input.reason,
           medicationId: batch.medicationId,
           batchId,
+          unitCostCents: batch.unitCostCents,
           userId,
         },
       });

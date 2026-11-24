@@ -25,6 +25,8 @@ export type Procedure = {
   preparation: string | null
   /** Valor padrão, usado quando nenhuma variação se aplica */
   priceCents: number
+  /** Custo direto estimado; a API só envia para administradores */
+  costCents?: number | null
   /** Variações por espécie e/ou porte, já ordenadas */
   prices: (PriceVariant & { id: string })[]
   durationMinutes: number | null
@@ -53,7 +55,7 @@ export type ProcedureDetail = Procedure & { priceChanges: PriceChange[] }
 export type ProcedureInput = Pick<
   Procedure,
   'code' | 'name' | 'description' | 'preparation' | 'priceCents' | 'durationMinutes' | 'categoryId' | 'active'
-> & { prices: PriceVariant[] }
+> & { prices: PriceVariant[]; costCents: number | null }
 
 export type ProcedureStatus = 'ativos' | 'inativos' | 'todos'
 

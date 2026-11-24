@@ -10,6 +10,7 @@ import { ErrorState, LoadingState } from '../../components/ui/States'
 import { ApiError } from '../../lib/api'
 import { formatAge, formatPhone, formatRecordCode, formatWeight } from '../../lib/format'
 import { useAuthenticatedUser } from '../auth/auth-api'
+import { AttendanceBillCard } from '../billing/AttendanceBillCard'
 import { PatientAvatar } from '../patients/PatientRow'
 import { SEX_LABELS, SIZE_LABELS, SPECIES_LABELS } from '../patients/species'
 import { useAttendance, useAttendanceAction, type AttendanceDetail } from './attendances-api'
@@ -130,6 +131,7 @@ function AttendanceView({ attendance }: { attendance: AttendanceDetail }) {
           <NotesSection attendance={attendance} canWrite={isClinical} />
         </div>
         <div className="space-y-5 lg:sticky lg:top-20">
+          <AttendanceBillCard attendanceId={attendance.id} />
           <ProceduresSection attendance={attendance} editable={editable} />
           <MedicationsSection attendance={attendance} editable={editable} />
           <p className="text-xs text-muted-foreground">

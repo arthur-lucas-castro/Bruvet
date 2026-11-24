@@ -5,6 +5,7 @@ import { prisma } from "../../lib/prisma.js";
 import { searchTerms } from "../../lib/search.js";
 import { resolvePrice } from "../procedures/pricing.js";
 import { stockService } from "../stock/stock.service.js";
+import { billingService } from "../billing/billing.service.js";
 import type { z } from "zod";
 import type {
   addMedicationSchema,
@@ -128,6 +129,7 @@ export const attendancesService = {
             reversedBy: { select: { id: true, createdAt: true } },
           },
         },
+        bill: { select: { id: true, status: true } },
       },
     });
     if (!attendance) throw new AppError("Atendimento não encontrado", 404);
@@ -149,7 +151,13 @@ export const attendancesService = {
       try {
         const last = await prisma.attendance.aggregate({ _max: { code: true } });
         return await prisma.attendance.create({
-          data: { ...input, code: (last._max.code ?? 0) + 1, createdById: actorId },
+          data: {
+            ...input,
+            code: (last._max.code ?? 0) + 1,
+            createdById: actorId,
+            // Cada atendimento tem a sua comanda (o que será cobrado do tutor)
+            bill: { create: {} },
+          },
         });
       } catch (error) {
         if (attempt < 3 && isCodeConflict(error)) continue;
@@ -177,7 +185,7 @@ export const attendancesService = {
 
     const finishedAt = new Date();
     const weightKg = attendance.weightKg;
-    return prisma.$transaction(async (tx) => {
+    return withBillSync(id, () => prisma.$transaction(async (tx) => {
       const updated = await tx.attendance.update({
         where: { id },
         data: { status: "finalizado", finishedAt },
@@ -202,14 +210,16 @@ export const attendancesService = {
         await tx.patientWeight.deleteMany({ where: { attendanceId: id } });
       }
       return updated;
-    });
+    }));
   },
 
   async cancel(id: string, reason: string) {
     await findOpenOrFail(id);
-    const [procedures, activeMedications] = await Promise.all([
+    const [procedures, activeMedications, billItems, payments] = await Promise.all([
       prisma.attendanceProcedure.count({ where: { attendanceId: id } }),
       prisma.stockMovement.count({ where: { attendanceId: id, type: "saida", reversedBy: null } }),
+      prisma.billItem.count({ where: { bill: { attendanceId: id } } }),
+      prisma.payment.count({ where: { bill: { attendanceId: id }, voidedAt: null } }),
     ]);
     if (procedures > 0 || activeMedications > 0) {
       throw new AppError(
@@ -218,10 +228,19 @@ export const attendancesService = {
         "ATTENDANCE_HAS_ITEMS",
       );
     }
-    return prisma.attendance.update({
-      where: { id },
-      data: { status: "cancelado", cancelReason: reason, finishedAt: new Date() },
-    });
+    if (billItems > 0 || payments > 0) {
+      throw new AppError(
+        "A comanda deste atendimento tem itens ou pagamentos. Remova os itens e peça a um administrador para estornar os pagamentos antes de cancelar.",
+        409,
+        "BILL_HAS_ITEMS",
+      );
+    }
+    return withBillSync(id, () =>
+      prisma.attendance.update({
+        where: { id },
+        data: { status: "cancelado", cancelReason: reason, finishedAt: new Date() },
+      }),
+    );
   },
 
   async reopen(id: string) {
@@ -229,7 +248,9 @@ export const attendancesService = {
     if (attendance.status !== "finalizado") {
       throw new AppError("Só atendimentos finalizados podem ser reabertos.", 409, "NOT_FINISHED");
     }
-    return prisma.attendance.update({ where: { id }, data: { status: "aberto", finishedAt: null } });
+    return withBillSync(id, () =>
+      prisma.attendance.update({ where: { id }, data: { status: "aberto", finishedAt: null } }),
+    );
   },
 
   // ---------- Evolução ----------
@@ -261,26 +282,31 @@ export const attendancesService = {
     if (!procedure.active) throw new AppError("Procedimento inativo no catálogo.", 400, "PROCEDURE_INACTIVE");
 
     const { priceCents, variant } = resolvePrice(procedure, patient);
-    return prisma.attendanceProcedure.create({
-      data: {
-        attendanceId: id,
-        procedureId: procedure.id,
-        name: procedure.name,
-        priceCents,
-        quantity: input.quantity,
-        species: variant?.species ?? null,
-        size: variant?.size ?? null,
-        notes: input.notes,
-        addedById: actorId,
-      },
-    });
+    return withBillSync(id, () =>
+      prisma.attendanceProcedure.create({
+        data: {
+          attendanceId: id,
+          procedureId: procedure.id,
+          name: procedure.name,
+          priceCents,
+          // Custo copiado no lançamento, para o financeiro não mudar com reajustes futuros
+          costCents: procedure.costCents,
+          quantity: input.quantity,
+          species: variant?.species ?? null,
+          size: variant?.size ?? null,
+          notes: input.notes,
+          addedById: actorId,
+        },
+      }),
+    );
   },
 
   async removeProcedure(id: string, itemId: string) {
     await findOpenOrFail(id);
     const item = await prisma.attendanceProcedure.findUnique({ where: { id: itemId } });
     if (!item || item.attendanceId !== id) throw new AppError("Item não encontrado", 404);
-    await prisma.attendanceProcedure.delete({ where: { id: itemId } });
+    await assertKeepsPaidCovered(id, item.priceCents * item.quantity);
+    await withBillSync(id, () => prisma.attendanceProcedure.delete({ where: { id: itemId } }));
   },
 
   // ---------- Medicamentos ----------
@@ -288,16 +314,18 @@ export const attendancesService = {
   /** Registra o uso de um medicamento: dá saída no estoque ligada ao paciente e ao atendimento. */
   async addMedication(id: string, input: AddMedicationInput, actorId: string) {
     const attendance = await findOpenOrFail(id);
-    return stockService.exit(
-      input.medicationId,
-      {
-        quantity: input.quantity,
-        batchId: input.batchId ?? null,
-        patientId: attendance.patientId,
-        reason: input.reason ?? `Atendimento nº ${formatCode(attendance.code)}`,
-      },
-      actorId,
-      { attendanceId: id },
+    return withBillSync(id, () =>
+      stockService.exit(
+        input.medicationId,
+        {
+          quantity: input.quantity,
+          batchId: input.batchId ?? null,
+          patientId: attendance.patientId,
+          reason: input.reason ?? `Atendimento nº ${formatCode(attendance.code)}`,
+        },
+        actorId,
+        { attendanceId: id },
+      ),
     );
   },
 
@@ -305,10 +333,30 @@ export const attendancesService = {
     const attendance = await findOpenOrFail(id);
     const movement = await prisma.stockMovement.findUnique({ where: { id: movementId } });
     if (!movement || movement.attendanceId !== id) throw new AppError("Lançamento não encontrado", 404);
-    return stockService.reverse(
-      movementId,
-      actorId,
-      reason || `Estorno no atendimento nº ${formatCode(attendance.code)}`,
+    if (movement.salePriceCents != null) {
+      await assertKeepsPaidCovered(id, Math.round(-movement.quantity * movement.salePriceCents));
+    }
+    return withBillSync(id, () =>
+      stockService.reverse(movementId, actorId, reason || `Estorno no atendimento nº ${formatCode(attendance.code)}`),
     );
   },
 };
+
+/** Executa uma alteração no atendimento e recalcula a situação da comanda dele. */
+async function withBillSync<T>(attendanceId: string, action: () => Promise<T>): Promise<T> {
+  const result = await action();
+  await billingService.syncByAttendance(attendanceId);
+  return result;
+}
+
+/** Impede que remover um item cobrado deixe a comanda com valor menor que o já pago. */
+async function assertKeepsPaidCovered(attendanceId: string, removedCents: number) {
+  const bill = await billingService.getByAttendance(attendanceId).catch(() => null);
+  if (bill && bill.totals.subtotalCents - removedCents - bill.discountCents < bill.totals.paidCents) {
+    throw new AppError(
+      "A comanda já tem pagamentos e ficaria com valor menor que o pago. Peça a um administrador para estornar um pagamento antes.",
+      409,
+      "BELOW_PAID",
+    );
+  }
+}
